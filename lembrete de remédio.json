@@ -1,0 +1,543 @@
+[
+    {
+        "id": "6962c218adba2780",
+        "type": "tab",
+        "label": "Lembretes de Remédios (CSV → Alexa + WhatsApp)",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "aa40b7069d3bb136",
+        "type": "inject",
+        "z": "6962c218adba2780",
+        "name": "Carregar JSON (startup + diário 00:01)",
+        "props": [],
+        "repeat": "",
+        "crontab": "01 00 * * *",
+        "once": true,
+        "onceDelay": 1,
+        "topic": "",
+        "x": 240,
+        "y": 100,
+        "wires": [
+            [
+                "file_in_remedios_json_lembretes"
+            ]
+        ]
+    },
+    {
+        "id": "57af458eb916e40c",
+        "type": "function",
+        "z": "6962c218adba2780",
+        "name": "Gerar jobs para cron-plus",
+        "func": "const linhas = Array.isArray(msg.payload) ? msg.payload : [];\n\nconst MAP = { dom: 0, seg: 1, ter: 2, qua: 3, qui: 4, sex: 5, sab: 6 };\n\nfunction diasParaCron(diasStr) {\n  const s = (diasStr || \"todos\").toLowerCase().replace(/\\s/g, \"\");\n  if (s === \"todos\" || s === \"\") return \"*\";\n  const nums = s.split(\",\").map(d => MAP[d]).filter(v => v !== undefined);\n  return nums.length ? nums.join(\",\") : \"*\";\n}\n\nfunction normalizaTel(tel) {\n  tel = String(tel || \"\").replace(/[^\\d]/g, \"\");\n\n  // Se vier com DDI +55 e celular com 9, remove o 9\n  tel = tel.replace(/^55(\\d{2})9(\\d{8})$/, \"55$1$2\");\n\n  // Se vier sem 55 e com 11 dígitos (DDD + 9 + número), adiciona 55 e remove o 9\n  if (/^\\d{11}$/.test(tel)) {\n    tel = tel.replace(/^(\\d{2})9(\\d{8})$/, \"55$1$2\");\n  }\n\n  // Se vier sem 55 e com 10 dígitos (DDD + número fixo/sem 9), adiciona 55\n  else if (/^\\d{10}$/.test(tel)) {\n    tel = \"55\" + tel;\n  }\n\n  return tel;\n}\n\n// filtra válidos\nconst validas = linhas.filter(r => {\n  const ativo = (r.ativo === undefined || r.ativo === \"\" || r.ativo === null)\n    ? \"1\"\n    : String(r.ativo).toLowerCase();\n\n  if (!(ativo === \"1\" || ativo === \"true\" || ativo === \"on\")) return false;\n  if (!r.hora) return false;\n\n  const m = String(r.hora).trim().match(/^([01]?\\d|2[0-3]):([0-5]\\d)(?::([0-5]\\d))?$/);\n  return !!m;\n});\n\n// agrupa por hora + dias + telefone\nconst grupos = {};\n\nvalidas.forEach((r) => {\n  const hora = String(r.hora).trim().slice(0, 5);\n  const dias = (r.dias || \"todos\").toLowerCase().replace(/\\s/g, \"\");\n  const tel = normalizaTel(r.telefone);\n  const chave = `${hora}|${dias}|${tel}`;\n\n  if (!grupos[chave]) {\n    grupos[chave] = {\n      hora,\n      dias,\n      telefone: tel,\n      medicamentos: []\n    };\n  }\n\n  grupos[chave].medicamentos.push({\n    remedio: r.remedio,\n    tipo: r.tipo,\n    quantidade: r.quantidade,\n    hora: hora\n  });\n});\n\n// cria jobs\nconst msgsAdd = [];\n\nObject.values(grupos).forEach((g, i) => {\n  const [hh, mm] = g.hora.split(\":\").map(v => parseInt(v, 10));\n  const dow = diasParaCron(g.dias);\n  const expression = `${mm} ${hh} * * ${dow}`;\n  const name = `grupo_${String(hh).padStart(2, \"0\")}${String(mm).padStart(2, \"0\")}_${g.dias || \"todos\"}_${i}`;\n\n  msgsAdd.push({\n    payload: {\n      command: \"add\",\n      name,\n      topic: name,\n      expression,\n      timezone: \"America/Sao_Paulo\",\n      payload: {\n        type: \"disparo_remedio\",\n        hora: g.hora,\n        dias: g.dias,\n        telefone: g.telefone,\n        medicamentos: g.medicamentos\n      }\n    }\n  });\n});\n\nconst msgRemove = { payload: { command: \"remove-all-jobs\" } };\n\nreturn [[msgRemove], msgsAdd];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 950,
+        "y": 120,
+        "wires": [
+            [
+                "5d33ae362c9ef660",
+                "a7d5cdf5ecad15d9"
+            ],
+            [
+                "5d33ae362c9ef660",
+                "a7d5cdf5ecad15d9"
+            ]
+        ]
+    },
+    {
+        "id": "3749979af19ff75e",
+        "type": "function",
+        "z": "6962c218adba2780",
+        "name": "Filtrar eventos do JSON",
+        "func": "if (!msg || !msg.payload) return null;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 270,
+        "y": 220,
+        "wires": [
+            [
+                "98b2c2b50bf4b1bb",
+                "14d02a17b1ee580f"
+            ]
+        ]
+    },
+    {
+        "id": "98b2c2b50bf4b1bb",
+        "type": "api-current-state",
+        "z": "6962c218adba2780",
+        "name": "input_boolean.remedios_on == on?",
+        "server": "71f7ce2caaf3a2ab",
+        "version": 3,
+        "outputs": 2,
+        "halt_if": "on",
+        "halt_if_type": "str",
+        "entity_id": "input_boolean.remedios_on",
+        "state_type": "str",
+        "for": "",
+        "forType": "num",
+        "forUnits": "minutes",
+        "override_topic": false,
+        "x": 560,
+        "y": 220,
+        "wires": [
+            [
+                "c51d28fddd1ad38e"
+            ],
+            [
+                "863ad195c0bacb1e"
+            ]
+        ]
+    },
+    {
+        "id": "c51d28fddd1ad38e",
+        "type": "function",
+        "z": "6962c218adba2780",
+        "name": "Montar mensagens (alexa_text / wp_text)",
+        "func": "const grupo = msg.payload.config.payload;\n\nif (!grupo || !Array.isArray(grupo.medicamentos) || grupo.medicamentos.length === 0) {\n    node.warn(\"Grupo inválido ou sem medicamentos\");\n    return null;\n}\n\nfunction formatDose(q, tipo) {\n    q = parseInt(q, 10);\n    tipo = (tipo || '').toLowerCase().trim();\n\n    if (isNaN(q) || q <= 0) return 'dose prescrita';\n\n    if (tipo === 'comprimido' || tipo === 'comprimidos') {\n        return q === 1 ? '1 comprimido' : `${q} comprimidos`;\n    }\n\n    if (tipo === 'gota' || tipo === 'gotas') {\n        return q === 1 ? '1 gota' : `${q} gotas`;\n    }\n\n    if (tipo === 'ml') {\n        return `${q} ml`;\n    }\n\n    return `${q} ${tipo || 'unidade'}`;\n}\n\nconst itens = grupo.medicamentos.map((m, idx) => {\n    const dose = formatDose(m.quantidade, m.tipo);\n    return {\n        idx: idx + 1,\n        nome: m.remedio,\n        dose: dose,\n        textoCompleto: `${m.remedio}, ${dose}`\n    };\n});\n\n// ---------- TEXTO ALEXA ----------\nif (itens.length === 1) {\n    msg.alexa_text = `Lembrete de remédio. ${itens[0].nome}. Tomar ${itens[0].dose} agora.`;\n} else {\n    const listaFalavel = itens.map(i => `${i.nome}, ${i.dose}`).join('; ');\n    msg.alexa_text = `Lembrete de remédios. Agora você deve tomar: ${listaFalavel}.`;\n}\n\n// ---------- TEXTO WHATSAPP ----------\nif (itens.length === 1) {\n    msg.wp_text =\n        `⏰ *Lembrete de Medicação*\\n\\n` +\n        `Hora: *${grupo.hora}*\\n` +\n        `Medicamento: *${itens[0].nome}*\\n` +\n        `Dose: *${itens[0].dose}*`;\n} else {\n    msg.wp_text =\n        `⏰ *Lembrete de Medicação*\\n\\n` +\n        `Hora: *${grupo.hora}*\\n` +\n        `${itens.length} medicamentos a serem tomados agora:\\n\\n` +\n        itens.map(i => `• *${i.nome}* — ${i.dose}`).join('\\n');\n}\n\n// ---------- TELEFONE ----------\nmsg.telefone = grupo.telefone || \"\";\n\n// ---------- PAYLOAD MQTT ----------\nmsg.mqtt_payload = {\n    hora: grupo.hora,\n    total: itens.length,\n    itens: itens.map(i => ({\n        nome: i.nome,\n        dose: i.dose\n    }))\n};\n\nnode.warn({\n    alexa_text: msg.alexa_text,\n    wp_text: msg.wp_text,\n    mqtt_payload: msg.mqtt_payload\n});\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 900,
+        "y": 220,
+        "wires": [
+            [
+                "2d78fbb3e7b011e5",
+                "0d0afcb0fd7c097d",
+                "17e1921102bc3a6f",
+                "fn_to_mqtt"
+            ]
+        ]
+    },
+    {
+        "id": "2d78fbb3e7b011e5",
+        "type": "api-call-service",
+        "z": "6962c218adba2780",
+        "name": "Alexa (notify.alexa_media)",
+        "server": "71f7ce2caaf3a2ab",
+        "version": 5,
+        "debugenabled": false,
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "data": "{\"target\":[\"media_player.echo_dot_de_lucas\"],\"message\":\"{{alexa_text}}\",\"data\":{\"type\":\"announce\",\"method\":\"speak\"}}",
+        "dataType": "json",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "domain": "notify",
+        "service": "alexa_media",
+        "mergecontext": "",
+        "x": 1210,
+        "y": 200,
+        "wires": [
+            [
+                "1bf259b16224e6d8"
+            ]
+        ]
+    },
+    {
+        "id": "0d0afcb0fd7c097d",
+        "type": "function",
+        "z": "6962c218adba2780",
+        "name": "Green-API request",
+        "func": "// Substitua pelos seus IDs válidos da Green-API\nconst ID = \"7107348721\"; // waInstanceId\nconst TOKEN = \"7df9c47cf3f94cc8b05f1326ae41a1c91a7dab9ca1984bbe8e\"; // apiTokenInstance\n\nconst numero = msg.telefone || \"\";\nif (!numero) {\n  node.status({fill:\"yellow\",shape:\"ring\",text:\"sem telefone\"});\n  return null;\n}\n\nmsg.method = \"POST\";\nmsg.url = `https://api.green-api.com/waInstance${ID}/sendMessage/${TOKEN}`;\nmsg.headers = {\"Content-Type\":\"application/json\"};\nmsg.payload = {\n  chatId: `${numero}@c.us`,\n  message: msg.wp_text\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1190,
+        "y": 280,
+        "wires": [
+            [
+                "1ded4929638fe4f8",
+                "2f1a4dcd732b1a84"
+            ]
+        ]
+    },
+    {
+        "id": "1ded4929638fe4f8",
+        "type": "http request",
+        "z": "6962c218adba2780",
+        "name": "WhatsApp HTTP",
+        "method": "use",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "persist": false,
+        "authType": "",
+        "x": 1410,
+        "y": 280,
+        "wires": [
+            [
+                "2f1a4dcd732b1a84"
+            ]
+        ]
+    },
+    {
+        "id": "1bf259b16224e6d8",
+        "type": "debug",
+        "z": "6962c218adba2780",
+        "name": "OK Alexa",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "true",
+        "statusVal": "Alexa enviado",
+        "statusType": "str",
+        "x": 1440,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "2f1a4dcd732b1a84",
+        "type": "debug",
+        "z": "6962c218adba2780",
+        "name": "OK WhatsApp",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "payload",
+        "statusVal": "WhatsApp enviado",
+        "statusType": "str",
+        "x": 1620,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "863ad195c0bacb1e",
+        "type": "debug",
+        "z": "6962c218adba2780",
+        "name": "Pausado (remedios_on off)",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "true",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 830,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "237d7941ff74c85c",
+        "type": "inject",
+        "z": "6962c218adba2780",
+        "name": "Recarregar JSON agora (teste)",
+        "props": [],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 210,
+        "y": 160,
+        "wires": [
+            [
+                "file_in_remedios_json_lembretes"
+            ]
+        ]
+    },
+    {
+        "id": "5d33ae362c9ef660",
+        "type": "cronplus",
+        "z": "6962c218adba2780",
+        "name": "cron-plus (controle + eventos)",
+        "outputField": "payload",
+        "timeZone": "",
+        "storeName": "",
+        "commandResponseMsgOutput": "output1",
+        "defaultLocation": "",
+        "defaultLocationType": "default",
+        "outputs": 1,
+        "options": [],
+        "x": 1330,
+        "y": 120,
+        "wires": [
+            [
+                "f6354fd567793ec7",
+                "41094d1fa7143ab5"
+            ]
+        ]
+    },
+    {
+        "id": "14d02a17b1ee580f",
+        "type": "debug",
+        "z": "6962c218adba2780",
+        "name": "debug 2",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 410,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "17e1921102bc3a6f",
+        "type": "debug",
+        "z": "6962c218adba2780",
+        "name": "debug 3",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1150,
+        "y": 440,
+        "wires": []
+    },
+    {
+        "id": "fn_to_mqtt",
+        "type": "function",
+        "z": "6962c218adba2780",
+        "name": "Preparar payload MQTT",
+        "func": "msg.topic = \"tcc/lucas/remedios\";\nmsg.payload = JSON.stringify(msg.mqtt_payload);\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1230,
+        "y": 360,
+        "wires": [
+            [
+                "mqtt_out_lcd"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_out_lcd",
+        "type": "mqtt out",
+        "z": "6962c218adba2780",
+        "name": "Enviar para LCD",
+        "topic": "",
+        "qos": "0",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "mqtt_broker_lucas",
+        "x": 1460,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "620389a911ee1a01",
+        "type": "link in",
+        "z": "6962c218adba2780",
+        "name": "link in 3",
+        "links": [
+            "f6354fd567793ec7"
+        ],
+        "x": 105,
+        "y": 220,
+        "wires": [
+            [
+                "3749979af19ff75e"
+            ]
+        ]
+    },
+    {
+        "id": "f6354fd567793ec7",
+        "type": "link out",
+        "z": "6962c218adba2780",
+        "name": "link out 3",
+        "mode": "link",
+        "links": [
+            "620389a911ee1a01"
+        ],
+        "x": 1625,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "41094d1fa7143ab5",
+        "type": "debug",
+        "z": "6962c218adba2780",
+        "name": "cron",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1650,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "a7d5cdf5ecad15d9",
+        "type": "debug",
+        "z": "6962c218adba2780",
+        "name": "debug 8",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1260,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "file_in_remedios_json_lembretes",
+        "type": "file in",
+        "z": "6962c218adba2780",
+        "name": "Ler remedios.json",
+        "filename": "/homeassistant/www/remedios.json",
+        "filenameType": "str",
+        "format": "utf8",
+        "chunk": false,
+        "sendError": true,
+        "encoding": "none",
+        "allProps": false,
+        "x": 510,
+        "y": 120,
+        "wires": [
+            [
+                "json_remedios_para_jobs",
+                "5ca7404a882eab1b"
+            ]
+        ]
+    },
+    {
+        "id": "json_remedios_para_jobs",
+        "type": "json",
+        "z": "6962c218adba2780",
+        "name": "JSON -> objetos",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 730,
+        "y": 120,
+        "wires": [
+            [
+                "57af458eb916e40c",
+                "80e8c015b5c05ac9"
+            ]
+        ]
+    },
+    {
+        "id": "80e8c015b5c05ac9",
+        "type": "debug",
+        "z": "6962c218adba2780",
+        "name": "debug 9",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 920,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "08240dfc75257e04",
+        "type": "debug",
+        "z": "6962c218adba2780",
+        "name": "debug 10",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 920,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "5ca7404a882eab1b",
+        "type": "debug",
+        "z": "6962c218adba2780",
+        "name": "debug 11",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 680,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "71f7ce2caaf3a2ab",
+        "type": "server",
+        "name": "Home Assistant",
+        "version": 5,
+        "addon": true
+    },
+    {
+        "id": "mqtt_broker_lucas",
+        "type": "mqtt-broker",
+        "name": "Mosquitto TCC Lucas",
+        "broker": "192.168.3.30",
+        "port": "1883",
+        "clientid": "node-red-remedios",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "1ed51deb6c3e693b",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-home-assistant-websocket": "0.80.2",
+            "node-red-contrib-cron-plus": "2.2.4"
+        }
+    }
+]

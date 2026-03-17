@@ -1,0 +1,446 @@
+[
+    {
+        "id": "tab_remedios_web_01",
+        "type": "tab",
+        "label": "Cadastro Web Remédios",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "http_in_lista_remedios",
+        "type": "http in",
+        "z": "tab_remedios_web_01",
+        "name": "GET /remedios",
+        "url": "/remedios",
+        "method": "get",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 100,
+        "wires": [
+            [
+                "file_in_remedios_json",
+                "da0d6b74ccbb36b7"
+            ]
+        ]
+    },
+    {
+        "id": "file_in_remedios_json",
+        "type": "file in",
+        "z": "tab_remedios_web_01",
+        "name": "Ler remedios.json",
+        "filename": "/homeassistant/www/remedios.json",
+        "filenameType": "str",
+        "format": "utf8",
+        "chunk": false,
+        "sendError": true,
+        "encoding": "none",
+        "allProps": false,
+        "x": 340,
+        "y": 100,
+        "wires": [
+            [
+                "json_remedios_json",
+                "30139079b687f495"
+            ]
+        ]
+    },
+    {
+        "id": "json_remedios_json",
+        "type": "json",
+        "z": "tab_remedios_web_01",
+        "name": "JSON -> objeto",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 550,
+        "y": 100,
+        "wires": [
+            [
+                "fn_preparar_pagina_remedios",
+                "06aaa7b7f3c53a7d"
+            ]
+        ]
+    },
+    {
+        "id": "fn_preparar_pagina_remedios",
+        "type": "function",
+        "z": "tab_remedios_web_01",
+        "name": "Preparar HTML",
+        "func": "const lista = Array.isArray(msg.payload) ? msg.payload : [];\n\nlet linhasTabela = \"\";\n\nfor (const r of lista) {\n    linhasTabela += `\n<tr>\n  <td>${r.hora || \"\"}</td>\n  <td>${r.remedio || \"\"}</td>\n  <td>${r.tipo || \"\"}</td>\n  <td>${r.quantidade || \"\"}</td>\n  <td>${r.dias || \"\"}</td>\n  <td>${r.ativo || \"\"}</td>\n  <td>${r.telefone || \"\"}</td>\n  <td>\n    <form method=\"post\" action=\"/endpoint/remedios/excluir\" onsubmit=\"return confirm('Deseja excluir este remédio?');\" style=\"margin:0;\">\n      <input type=\"hidden\" name=\"id\" value=\"${r.id || \"\"}\">\n      <button type=\"submit\" style=\"background:#d32f2f;\">Excluir</button>\n    </form>\n  </td>\n</tr>`;\n}\n\nif (linhasTabela === \"\") {\n    linhasTabela = `<tr><td colspan=\"8\">Nenhum remédio cadastrado ainda.</td></tr>`;\n}\n\nmsg.linhasTabela = linhasTabela;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 750,
+        "y": 100,
+        "wires": [
+            [
+                "template_pagina_remedios",
+                "0df1eec3d886cdc6"
+            ]
+        ]
+    },
+    {
+        "id": "template_pagina_remedios",
+        "type": "template",
+        "z": "tab_remedios_web_01",
+        "name": "HTML página remédios",
+        "field": "payload",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "<!DOCTYPE html>\n<html lang=\"pt-BR\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Cadastro de Remédios</title>\n  <style>\n    body {\n      font-family: Arial, sans-serif;\n      max-width: 1000px;\n      margin: 30px auto;\n      padding: 0 16px;\n      background: #f7f7f7;\n      color: #222;\n    }\n    h1, h2 {\n      margin-bottom: 12px;\n    }\n    .card {\n      background: white;\n      border-radius: 12px;\n      padding: 20px;\n      margin-bottom: 20px;\n      box-shadow: 0 2px 10px rgba(0,0,0,0.08);\n    }\n    .grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));\n      gap: 12px;\n    }\n    label {\n      display: block;\n      font-weight: bold;\n      margin-bottom: 6px;\n    }\n    input, select {\n      width: 100%;\n      padding: 10px;\n      border: 1px solid #ccc;\n      border-radius: 8px;\n      box-sizing: border-box;\n    }\n    button {\n      margin-top: 16px;\n      padding: 12px 18px;\n      border: none;\n      border-radius: 8px;\n      background: #1976d2;\n      color: white;\n      font-size: 15px;\n      cursor: pointer;\n    }\n    button:hover {\n      background: #125ea7;\n    }\n    table {\n      width: 100%;\n      border-collapse: collapse;\n      margin-top: 10px;\n    }\n    th, td {\n      padding: 10px;\n      border-bottom: 1px solid #ddd;\n      text-align: left;\n      font-size: 14px;\n    }\n    th {\n      background: #f0f0f0;\n    }\n    .muted {\n      color: #666;\n      font-size: 14px;\n    }\n    .dias-semana {\n  display: flex;\n  gap: 14px;\n  flex-wrap: wrap;\n  align-items: center;\n  padding: 10px 0;\n}\n\n.dias-semana label {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  font-weight: normal;\n  margin-bottom: 0;\n}\n\n.dias-semana input[type=\"checkbox\"] {\n  width: auto;\n}\n  </style>\n</head>\n<body>\n  <div class=\"card\">\n    <h1>Cadastro de Remédios</h1>\n    <p class=\"muted\">Página local para cadastrar os lembretes do sistema.</p>\n  </div>\n\n  <div class=\"card\">\n    <h2>Novo remédio</h2>\n    <form method=\"post\" action=\"/endpoint/remedios/salvar\">\n      <div class=\"grid\">\n        <div>\n          <label>Hora</label>\n          <input type=\"time\" name=\"hora\" required>\n        </div>\n        <div>\n          <label>Remédio</label>\n          <input type=\"text\" name=\"remedio\" required>\n        </div>\n        <div>\n          <label>Tipo</label>\n          <select name=\"tipo\" required>\n            <option value=\"comprimido\">comprimido</option>\n            <option value=\"gota\">gota</option>\n            <option value=\"ml\">ml</option>\n          </select>\n        </div>\n        <div>\n          <label>Quantidade</label>\n          <input type=\"number\" name=\"quantidade\" min=\"1\" required>\n        </div>\n        <div>\n          <label>Telefone</label>\n          <input type=\"text\" name=\"telefone\">\n        </div>\n        <div>\n          <label>Ativo</label>\n          <select name=\"ativo\">\n            <option value=\"1\">Sim</option>\n            <option value=\"0\">Não</option>\n          </select>\n        </div>\n          <div>\n            <label>Dias</label>\n            <div class=\"dias-semana\">\n              <label><input type=\"checkbox\" name=\"dias_semana\" value=\"dom\"> D</label>\n              <label><input type=\"checkbox\" name=\"dias_semana\" value=\"seg\"> S</label>\n              <label><input type=\"checkbox\" name=\"dias_semana\" value=\"ter\"> T</label>\n              <label><input type=\"checkbox\" name=\"dias_semana\" value=\"qua\"> Q</label>\n              <label><input type=\"checkbox\" name=\"dias_semana\" value=\"qui\"> Q</label>\n              <label><input type=\"checkbox\" name=\"dias_semana\" value=\"sex\"> S</label>\n              <label><input type=\"checkbox\" name=\"dias_semana\" value=\"sab\"> S</label>\n            </div>\n          </div>\n        <div>\n          <label>Início</label>\n          <input type=\"date\" name=\"inicio\">\n        </div>\n      </div>\n      <button type=\"submit\">Salvar remédio</button>\n    </form>\n  </div>\n\n  <div class=\"card\">\n    <h2>Remédios cadastrados</h2>\n    <table>\n      <thead>\n        <tr>\n          <th>Hora</th>\n          <th>Remédio</th>\n          <th>Tipo</th>\n          <th>Qtd</th>\n          <th>Dias</th>\n          <th>Ativo</th>\n          <th>Telefone</th>\n          <th>Ações</th>\n        </tr>\n      </thead>\n      <tbody>\n        {{{linhasTabela}}}\n      </tbody>\n    </table>\n  </div>\n</body>\n</html>",
+        "output": "str",
+        "x": 970,
+        "y": 100,
+        "wires": [
+            [
+                "http_response_remedios",
+                "2a5dcf75fd0dce91"
+            ]
+        ]
+    },
+    {
+        "id": "http_response_remedios",
+        "type": "http response",
+        "z": "tab_remedios_web_01",
+        "name": "Responder HTML",
+        "statusCode": "",
+        "headers": {
+            "Content-Type": "text/html; charset=utf-8"
+        },
+        "x": 1270,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "da0d6b74ccbb36b7",
+        "type": "debug",
+        "z": "tab_remedios_web_01",
+        "name": "debug 1",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 280,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "30139079b687f495",
+        "type": "debug",
+        "z": "tab_remedios_web_01",
+        "name": "debug 4",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 520,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "06aaa7b7f3c53a7d",
+        "type": "debug",
+        "z": "tab_remedios_web_01",
+        "name": "debug 5",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 780,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "0df1eec3d886cdc6",
+        "type": "debug",
+        "z": "tab_remedios_web_01",
+        "name": "debug 6",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1020,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "2a5dcf75fd0dce91",
+        "type": "debug",
+        "z": "tab_remedios_web_01",
+        "name": "debug 7",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1260,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "http_in_salvar_remedio",
+        "type": "http in",
+        "z": "tab_remedios_web_01",
+        "name": "POST /remedios/salvar",
+        "url": "/remedios/salvar",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 340,
+        "wires": [
+            [
+                "file_in_remedios_json_salvar"
+            ]
+        ]
+    },
+    {
+        "id": "file_in_remedios_json_salvar",
+        "type": "file in",
+        "z": "tab_remedios_web_01",
+        "name": "Ler remedios.json (salvar)",
+        "filename": "/homeassistant/www/remedios.json",
+        "filenameType": "str",
+        "format": "utf8",
+        "chunk": false,
+        "sendError": true,
+        "encoding": "none",
+        "allProps": false,
+        "x": 380,
+        "y": 340,
+        "wires": [
+            [
+                "json_remedios_json_salvar"
+            ]
+        ]
+    },
+    {
+        "id": "json_remedios_json_salvar",
+        "type": "json",
+        "z": "tab_remedios_web_01",
+        "name": "JSON -> objeto (salvar)",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 630,
+        "y": 340,
+        "wires": [
+            [
+                "fn_adicionar_remedio"
+            ]
+        ]
+    },
+    {
+        "id": "fn_adicionar_remedio",
+        "type": "function",
+        "z": "tab_remedios_web_01",
+        "name": "Adicionar remédio à lista",
+        "func": "const lista = Array.isArray(msg.payload) ? msg.payload : [];\nconst body = msg.req.body || {};\n\nlet dias = body.dias_semana || [];\n\nif (!Array.isArray(dias)) {\n    dias = dias ? [dias] : [];\n}\n\nconst novo = {\n    id: String(Date.now()),\n    hora: body.hora || \"\",\n    remedio: body.remedio || \"\",\n    tipo: body.tipo || \"\",\n    quantidade: body.quantidade || \"\",\n    telefone: body.telefone || \"\",\n    ativo: body.ativo || \"1\",\n    dias: dias.join(\",\"),\n    inicio: body.inicio || \"\"\n};\n\nlista.push(novo);\n\nmsg.payload = JSON.stringify(lista, null, 2);\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 880,
+        "y": 340,
+        "wires": [
+            [
+                "file_out_remedios_json_salvar"
+            ]
+        ]
+    },
+    {
+        "id": "file_out_remedios_json_salvar",
+        "type": "file",
+        "z": "tab_remedios_web_01",
+        "name": "Gravar remedios.json",
+        "filename": "/homeassistant/www/remedios.json",
+        "filenameType": "str",
+        "appendNewline": false,
+        "createDir": false,
+        "overwriteFile": "true",
+        "encoding": "none",
+        "x": 1120,
+        "y": 340,
+        "wires": [
+            [
+                "fn_redirect_remedios"
+            ]
+        ]
+    },
+    {
+        "id": "fn_redirect_remedios",
+        "type": "function",
+        "z": "tab_remedios_web_01",
+        "name": "Redirecionar para lista",
+        "func": "msg.statusCode = 302;\nmsg.headers = {\n    Location: \"/endpoint/remedios\"\n};\nmsg.payload = \"\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1350,
+        "y": 340,
+        "wires": [
+            [
+                "http_response_salvar_remedio"
+            ]
+        ]
+    },
+    {
+        "id": "http_response_salvar_remedio",
+        "type": "http response",
+        "z": "tab_remedios_web_01",
+        "name": "Resposta salvar",
+        "statusCode": "",
+        "headers": {},
+        "x": 1560,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "http_in_excluir_remedio",
+        "type": "http in",
+        "z": "tab_remedios_web_01",
+        "name": "POST /remedios/excluir",
+        "url": "/remedios/excluir",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 440,
+        "wires": [
+            [
+                "file_in_remedios_json_excluir"
+            ]
+        ]
+    },
+    {
+        "id": "file_in_remedios_json_excluir",
+        "type": "file in",
+        "z": "tab_remedios_web_01",
+        "name": "Ler remedios.json (excluir)",
+        "filename": "/homeassistant/www/remedios.json",
+        "filenameType": "str",
+        "format": "utf8",
+        "chunk": false,
+        "sendError": true,
+        "encoding": "none",
+        "allProps": false,
+        "x": 390,
+        "y": 440,
+        "wires": [
+            [
+                "json_remedios_json_excluir"
+            ]
+        ]
+    },
+    {
+        "id": "json_remedios_json_excluir",
+        "type": "json",
+        "z": "tab_remedios_web_01",
+        "name": "JSON -> objeto (excluir)",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 630,
+        "y": 440,
+        "wires": [
+            [
+                "fn_excluir_remedio"
+            ]
+        ]
+    },
+    {
+        "id": "fn_excluir_remedio",
+        "type": "function",
+        "z": "tab_remedios_web_01",
+        "name": "Excluir remédio da lista",
+        "func": "const lista = Array.isArray(msg.payload) ? msg.payload : [];\nconst body = msg.req.body || {};\nconst idExcluir = String(body.id || \"\");\n\nconst novaLista = lista.filter(item => String(item.id || \"\") !== idExcluir);\n\nmsg.payload = JSON.stringify(novaLista, null, 2);\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 880,
+        "y": 440,
+        "wires": [
+            [
+                "file_out_remedios_json_excluir"
+            ]
+        ]
+    },
+    {
+        "id": "file_out_remedios_json_excluir",
+        "type": "file",
+        "z": "tab_remedios_web_01",
+        "name": "Gravar remedios.json (excluir)",
+        "filename": "/homeassistant/www/remedios.json",
+        "filenameType": "str",
+        "appendNewline": false,
+        "createDir": false,
+        "overwriteFile": "true",
+        "encoding": "none",
+        "x": 1140,
+        "y": 440,
+        "wires": [
+            [
+                "fn_redirect_remedios_excluir"
+            ]
+        ]
+    },
+    {
+        "id": "fn_redirect_remedios_excluir",
+        "type": "function",
+        "z": "tab_remedios_web_01",
+        "name": "Redirecionar após excluir",
+        "func": "msg.statusCode = 302;\nmsg.headers = {\n    Location: \"/endpoint/remedios\"\n};\nmsg.payload = \"\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1430,
+        "y": 440,
+        "wires": [
+            [
+                "http_response_excluir_remedio"
+            ]
+        ]
+    },
+    {
+        "id": "http_response_excluir_remedio",
+        "type": "http response",
+        "z": "tab_remedios_web_01",
+        "name": "Resposta excluir",
+        "statusCode": "",
+        "headers": {},
+        "x": 1690,
+        "y": 440,
+        "wires": []
+    }
+]

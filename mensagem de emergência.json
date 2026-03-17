@@ -1,0 +1,302 @@
+[
+    {
+        "id": "f4a232aa305cf9b9",
+        "type": "tab",
+        "label": "Mensagem de Emergência",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "init_backoff",
+        "type": "function",
+        "z": "f4a232aa305cf9b9",
+        "name": "Init (status ON, tent=0)",
+        "func": "// CONFIG\nflow.set('green_instanceId', '7107348721');\nflow.set('green_token', '7df9c47cf3f94cc8b05f1326ae41a1c91a7dab9ca1984bbe8e');\nflow.set('dest_chatId', '553284324503@c.us');\nflow.set('em_msg', '⚠️ Botão de emergência pressionado. Vá até o local para confirmar que está tudo bem.');\n\n// Backoff\nflow.set('em_alert_active', true);\nflow.set('em_base_ms', 60_000);      // 1 min\nflow.set('em_max_ms', 15*60_000);    // teto 15 min\nflow.set('em_max_attempts', 8);      // opcional\n\nmsg.attempt = 0;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 700,
+        "y": 140,
+        "wires": [
+            [
+                "build_green_payload",
+                "calc_delay"
+            ]
+        ]
+    },
+    {
+        "id": "build_green_payload",
+        "type": "function",
+        "z": "f4a232aa305cf9b9",
+        "name": "Montar POST Green-API",
+        "func": "const instanceId = flow.get('green_instanceId');\nconst token      = flow.get('green_token');\nconst chatId     = flow.get('dest_chatId');\nconst text       = flow.get('em_msg');\nif(!instanceId||!token||!chatId){ node.error('Faltam credenciais/config.'); return null; }\nmsg.method = 'POST';\nmsg.headers = { 'Content-Type':'application/json' };\nmsg.url = `https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`;\nmsg.payload = { chatId, message: text };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 990,
+        "y": 40,
+        "wires": [
+            [
+                "http_send"
+            ]
+        ]
+    },
+    {
+        "id": "http_send",
+        "type": "http request",
+        "z": "f4a232aa305cf9b9",
+        "name": "POST sendMessage",
+        "method": "use",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 1320,
+        "y": 40,
+        "wires": [
+            [
+                "dbg_resp",
+                "attempt_next"
+            ]
+        ]
+    },
+    {
+        "id": "dbg_resp",
+        "type": "debug",
+        "z": "f4a232aa305cf9b9",
+        "name": "Resp Green-API",
+        "active": true,
+        "tosidebar": true,
+        "complete": "true",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1540,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "fd01baaa204ba1f8",
+        "type": "server-state-changed",
+        "z": "f4a232aa305cf9b9",
+        "name": "",
+        "server": "3de65c6.40881a4",
+        "version": 6,
+        "outputs": 2,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "input_boolean.emergencia"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": false,
+        "stateType": "habool",
+        "ifState": "true",
+        "ifStateType": "bool",
+        "ifStateOperator": "is",
+        "outputOnlyOnStateChange": false,
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": false,
+        "ignorePrevStateUnavailable": false,
+        "ignoreCurrentStateUnknown": false,
+        "ignoreCurrentStateUnavailable": false,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            },
+            {
+                "property": "data",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "eventData"
+            },
+            {
+                "property": "topic",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "triggerId"
+            }
+        ],
+        "x": 360,
+        "y": 140,
+        "wires": [
+            [
+                "init_backoff"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "calc_delay",
+        "type": "function",
+        "z": "f4a232aa305cf9b9",
+        "name": "Calc delay expo (1,2,4,8…)",
+        "func": "const active = flow.get('em_alert_active');\nif (!active) { return null; }\nconst base = Number(flow.get('em_base_ms') || 60000);\nconst maxMs = Number(flow.get('em_max_ms') || 900000);\nconst maxA = Number(flow.get('em_max_attempts') || 99);\nconst k = Number(msg.attempt || 0);\nif (k >= maxA) { node.status({fill:'grey',shape:'ring',text:'fim por limite'}); return null; }\nconst delay = Math.min(base * Math.pow(2, k), maxMs);\nmsg.delay = delay; // usado pelo Delay\nnode.status({fill:'blue',shape:'dot',text:`tent=${k} | aguardar ${(delay/60000).toFixed(2)} min`});\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 1040,
+        "y": 260,
+        "wires": [
+            [
+                "delay_msg"
+            ]
+        ]
+    },
+    {
+        "id": "delay_msg",
+        "type": "delay",
+        "z": "f4a232aa305cf9b9",
+        "name": "Aguardar msg.delay",
+        "pauseType": "delayv",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "outputs": 1,
+        "x": 1320,
+        "y": 260,
+        "wires": [
+            [
+                "3bb6644aa9929a17"
+            ]
+        ]
+    },
+    {
+        "id": "attempt_next",
+        "type": "function",
+        "z": "f4a232aa305cf9b9",
+        "name": "attempt++ e reagendar",
+        "func": "const active = flow.get('em_alert_active');\nif (!active) { node.status({fill:'grey',shape:'ring',text:'parado'}); return null; }\nmsg.attempt = (Number(msg.attempt) || 0) + 1;\nnode.status({fill:'green',shape:'dot',text:`enviado | próxima tent=${msg.attempt}`});\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 1630,
+        "y": 120,
+        "wires": [
+            [
+                "25af554e9677f885"
+            ]
+        ]
+    },
+    {
+        "id": "ha_check_before_send",
+        "type": "api-current-state",
+        "z": "f4a232aa305cf9b9",
+        "name": "HA: ainda ON?",
+        "server": "3de65c6.40881a4",
+        "version": 3,
+        "outputs": 2,
+        "halt_if": "on",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_boolean.emergencia",
+        "blockInputOverrides": false,
+        "outputProperties": [],
+        "for": "",
+        "forType": "num",
+        "x": 660,
+        "y": 40,
+        "wires": [
+            [
+                "build_green_payload"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "3bb6644aa9929a17",
+        "type": "link out",
+        "z": "f4a232aa305cf9b9",
+        "name": "link out 1",
+        "mode": "link",
+        "links": [
+            "263d30e85e6c5d29"
+        ],
+        "x": 1495,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "263d30e85e6c5d29",
+        "type": "link in",
+        "z": "f4a232aa305cf9b9",
+        "name": "link in 1",
+        "links": [
+            "3bb6644aa9929a17"
+        ],
+        "x": 505,
+        "y": 40,
+        "wires": [
+            [
+                "ha_check_before_send"
+            ]
+        ]
+    },
+    {
+        "id": "25af554e9677f885",
+        "type": "link out",
+        "z": "f4a232aa305cf9b9",
+        "name": "link out 2",
+        "mode": "link",
+        "links": [
+            "d40d0a54a0bd2e6c"
+        ],
+        "x": 1835,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "d40d0a54a0bd2e6c",
+        "type": "link in",
+        "z": "f4a232aa305cf9b9",
+        "name": "link in 2",
+        "links": [
+            "25af554e9677f885"
+        ],
+        "x": 845,
+        "y": 300,
+        "wires": [
+            [
+                "calc_delay"
+            ]
+        ]
+    },
+    {
+        "id": "3de65c6.40881a4",
+        "type": "server",
+        "name": "Home Assistant",
+        "addon": true
+    },
+    {
+        "id": "2f4c84865fd0a025",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-home-assistant-websocket": "0.80.2"
+        }
+    }
+]
